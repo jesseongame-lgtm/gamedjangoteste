@@ -1,118 +1,480 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jogo Básico</title>
+    <title>Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        /* Adicionando um estilo simples para os botões de controle */
-        .control-buttons {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a0f;
             display: flex;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            gap: 10px;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+        }
+
+        /* Fundo animado com grid pixel */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,255,128,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,128,0.03) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .game-wrapper {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Header */
+        .game-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 500px;
+            padding: 0 4px;
+        }
+
+        .game-title {
+            font-size: 10px;
+            color: #00ff80;
+            text-shadow: 0 0 10px #00ff8088;
+            letter-spacing: 2px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff80;
+            box-shadow: 0 0 8px #00ff80;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .status-dot.offline {
+            background: #ff4444;
+            box-shadow: 0 0 8px #ff4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* Canvas container */
+        .canvas-container {
+            position: relative;
+            border: 2px solid #00ff8044;
+            box-shadow:
+                0 0 0 1px #00ff8022,
+                0 0 30px #00ff8022,
+                inset 0 0 30px rgba(0,0,0,0.5);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        /* Cantos decorativos */
+        .canvas-container::before,
+        .canvas-container::after {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-color: #00ff80;
+            border-style: solid;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .canvas-container::before {
+            top: -2px; left: -2px;
+            border-width: 2px 0 0 2px;
+        }
+        .canvas-container::after {
+            bottom: -2px; right: -2px;
+            border-width: 0 2px 2px 0;
+        }
+
+        #gameCanvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* Scanline overlay */
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.08) 2px,
+                rgba(0,0,0,0.08) 4px
+            );
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* HUD de jogadores */
+        .hud {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            max-width: 500px;
+            padding: 8px 12px;
+            background: rgba(0,255,128,0.04);
+            border: 1px solid #00ff8022;
+            border-radius: 4px;
+        }
+
+        .hud-label {
+            font-size: 6px;
+            color: #00ff8066;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .hud-value {
+            font-size: 8px;
+            color: #00ff80;
+        }
+
+        .hud-divider {
+            width: 1px;
+            height: 20px;
+            background: #00ff8022;
+        }
+
+        /* Botões mobile */
+        .control-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 48px);
+            grid-template-rows: repeat(3, 48px);
+            gap: 4px;
         }
 
         .control-buttons button {
-            padding: 10px;
-            background-color: #ccc;
-            border: none;
-            border-radius: 5px;
+            width: 48px;
+            height: 48px;
+            background: rgba(0,255,128,0.08);
+            border: 1px solid #00ff8044;
+            border-radius: 4px;
+            color: #00ff80;
+            font-size: 16px;
             cursor: pointer;
-            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.1s, transform 0.1s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .control-buttons button:active {
-            background-color: #888;
+        .control-buttons button:active,
+        .control-buttons button.pressed {
+            background: rgba(0,255,128,0.25);
+            transform: scale(0.92);
+            box-shadow: 0 0 12px #00ff8044;
+        }
+
+        #upBtn    { grid-column: 2; grid-row: 1; }
+        #leftBtn  { grid-column: 1; grid-row: 2; }
+        #downBtn  { grid-column: 2; grid-row: 3; }
+        #rightBtn { grid-column: 3; grid-row: 2; }
+
+        /* Tela de login */
+        .login-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0a0a0f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            z-index: 100;
+        }
+
+        .login-overlay h1 {
+            font-size: 16px;
+            color: #00ff80;
+            text-shadow: 0 0 20px #00ff80;
+            animation: flicker 3s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 95%, 100% { opacity: 1; }
+            96% { opacity: 0.4; }
+            97% { opacity: 1; }
+            98% { opacity: 0.2; }
+        }
+
+        .login-box {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+            border: 1px solid #00ff8033;
+            padding: 24px 32px;
+            background: rgba(0,255,128,0.03);
+        }
+
+        .login-box label {
+            font-size: 7px;
+            color: #00ff8088;
+            letter-spacing: 2px;
+        }
+
+        .login-box input {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid #00ff8066;
+            color: #00ff80;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            padding: 8px 4px;
+            outline: none;
+            width: 200px;
+            text-align: center;
+            caret-color: #00ff80;
+        }
+
+        .login-box input:focus {
+            border-bottom-color: #00ff80;
+            text-shadow: 0 0 8px #00ff8066;
+        }
+
+        .login-box button {
+            margin-top: 8px;
+            background: transparent;
+            border: 2px solid #00ff80;
+            color: #00ff80;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 8px;
+            padding: 10px 24px;
+            cursor: pointer;
+            letter-spacing: 2px;
+            transition: all 0.15s;
+        }
+
+        .login-box button:hover {
+            background: #00ff8022;
+            box-shadow: 0 0 20px #00ff8044;
+        }
+
+        .login-overlay.hidden { display: none; }
+
+        /* Mensagem de conexão perdida */
+        .disconnected-msg {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            font-size: 7px;
+            color: #ff4444;
+            letter-spacing: 1px;
+            text-align: center;
+            line-height: 2;
+        }
+        .disconnected-msg.visible { display: flex; }
+
+        @media (max-width: 540px) {
+            #gameCanvas { width: 100vw; height: auto; }
+            .canvas-container { width: 100vw; }
         }
     </style>
 </head>
 <body>
-    <h1>Jogo Básico</h1>
-    <canvas id="gameCanvas" width="500" height="300" style="border: 2px solid black;"></canvas>
-    
-    <div class="control-buttons">
-        <button id="upBtn">↑</button>
-        <button id="leftBtn">←</button>
-        <button id="rightBtn">→</button>
-        <button id="downBtn">↓</button>
+
+    <!-- Tela de login -->
+    <div class="login-overlay" id="loginOverlay">
+        <h1>⚔ GAME ⚔</h1>
+        <div class="login-box">
+            <label>ENTER YOUR NAME</label>
+            <input type="text" id="usernameInput" maxlength="12" placeholder="PLAYER" autofocus />
+            <button id="startBtn">► START</button>
+        </div>
+    </div>
+
+    <div class="game-wrapper">
+        <!-- Header -->
+        <div class="game-header">
+            <span class="game-title">⚔ GAME</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:6px;color:#00ff8066;" id="statusText">CONECTANDO</span>
+                <div class="status-dot offline" id="statusDot"></div>
+            </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="canvas-container">
+            <canvas id="gameCanvas" width="500" height="300"></canvas>
+            <div class="scanlines"></div>
+            <div class="disconnected-msg" id="disconnectedMsg">
+                CONEXÃO PERDIDA<br>
+                <span style="font-size:6px;color:#ff444488;">recarregue a página</span>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div class="hud">
+            <div>
+                <div class="hud-label">jogador</div>
+                <div class="hud-value" id="hudName">—</div>
+            </div>
+            <div class="hud-divider"></div>
+            <div>
+                <div class="hud-label">online</div>
+                <div class="hud-value" id="hudPlayers">0</div>
+            </div>
+            <div class="hud-divider"></div>
+            <div>
+                <div class="hud-label">ping</div>
+                <div class="hud-value" id="hudPing">—</div>
+            </div>
+        </div>
+
+        <!-- Botões mobile -->
+        <div class="control-buttons">
+            <button id="upBtn">▲</button>
+            <button id="leftBtn">◀</button>
+            <button id="downBtn">▼</button>
+            <button id="rightBtn">▶</button>
+        </div>
     </div>
 
     <script>
-        let nomeUsuario = prompt("Digite seu nome de usuário:");
-		
-		const background = new Image();
-		background.src = "{% static 'img/background.png' %}";
+        let nomeUsuario = null;
 
-        // Animação de parado (idle)
+        const background = new Image();
+        background.src = "{% static 'img/background.png' %}";
+
         const idleImages = [];
-        idleImages.push(new Image());
-        idleImages[0].src = "{% static 'img/James-Lateral-8.png' %}";
-        idleImages.push(new Image());
-        idleImages[1].src = "{% static 'img/James-Lateral-9.png' %}";
+        idleImages.push(new Image()); idleImages[0].src = "{% static 'img/James-Lateral-8.png' %}";
+        idleImages.push(new Image()); idleImages[1].src = "{% static 'img/James-Lateral-9.png' %}";
 
-        // Animação de corrida (imagens de 1 a 7)
         const runningImages = [];
-        runningImages.push(new Image());
-        runningImages[0].src = "{% static 'img/James-Lateral-1.png' %}";
-        runningImages.push(new Image());
-        runningImages[1].src = "{% static 'img/James-Lateral-2.png' %}";
-        runningImages.push(new Image());
-        runningImages[2].src = "{% static 'img/James-Lateral-3.png' %}";
-        runningImages.push(new Image());
-        runningImages[3].src = "{% static 'img/James-Lateral-4.png' %}";
-        runningImages.push(new Image());
-        runningImages[4].src = "{% static 'img/James-Lateral-5.png' %}";
-        runningImages.push(new Image());
-        runningImages[5].src = "{% static 'img/James-Lateral-6.png' %}";
-        runningImages.push(new Image());
-        runningImages[6].src = "{% static 'img/James-Lateral-7.png' %}";
-
-        const socket = new WebSocket("ws://" + window.location.host + "/ws/game/");
-        let gamePlayers = {}; // Armazena os jogadores
-
-        // Configuração do Canvas
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-		ctx.imageSmoothingEnabled = false;  // Desabilita a suavização da imagem
-
-        socket.onopen = function() {
-            if (nomeUsuario) {
-                console.log("Nome de usuário: " + nomeUsuario);
-                socket.send(JSON.stringify({
-                    type: "set_username",
-                    username: nomeUsuario
-                }));
-            }
-        };
-
-        let movimento = {
-            esquerda: false,
-            direita: false,
-            cima: false,
-            baixo: false
-        };
-
-        let movimentoAnterior = { ...movimento };
-        let movimentoInterval = null;  // Armazena o intervalo de envio de movimento
-
-        function enviarMovimento() {
-            if (JSON.stringify(movimento) !== JSON.stringify(movimentoAnterior)) {
-                socket.send(JSON.stringify({
-                    type: "update_movement",
-                    movimento: movimento
-                }));
-                movimentoAnterior = { ...movimento };
-            }
+        for (let i = 1; i <= 7; i++) {
+            const img = new Image();
+            img.src = `{% static 'img/' %}James-Lateral-${i}.png`;
+            runningImages.push(img);
         }
 
+        // Login
+        const loginOverlay = document.getElementById('loginOverlay');
+        const usernameInput = document.getElementById('usernameInput');
+        const startBtn = document.getElementById('startBtn');
+
+        function iniciarJogo() {
+            const nome = usernameInput.value.trim();
+            if (!nome) return;
+            nomeUsuario = nome;
+            document.getElementById('hudName').textContent = nome.toUpperCase();
+            loginOverlay.classList.add('hidden');
+            conectarWebSocket();
+        }
+
+        startBtn.addEventListener('click', iniciarJogo);
+        usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') iniciarJogo(); });
+
+        // WebSocket
+        let socket;
+        let pingStart;
+        let gamePlayers = {};
+
+        const statusDot  = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const hudPlayers = document.getElementById('hudPlayers');
+        const hudPing    = document.getElementById('hudPing');
+        const disconnectedMsg = document.getElementById('disconnectedMsg');
+
+        function conectarWebSocket() {
+            const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+            socket = new WebSocket(wsProtocol + window.location.host + "/ws/game/");
+
+            socket.onopen = function() {
+                statusDot.classList.remove('offline');
+                statusText.textContent = 'ONLINE';
+                disconnectedMsg.classList.remove('visible');
+                socket.send(JSON.stringify({ type: "set_username", username: nomeUsuario }));
+                setInterval(() => {
+                    pingStart = Date.now();
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }));
+                }, 3000);
+            };
+
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.type === "pong") {
+                    hudPing.textContent = (Date.now() - pingStart) + 'ms';
+                    return;
+                }
+
+                if (data.type === "players_list_update") {
+                    const updatedPlayers = data.players;
+                    for (const username in updatedPlayers) {
+                        const newPlayer = updatedPlayers[username];
+                        if (gamePlayers[username] && gamePlayers[username].position) {
+                            gamePlayers[username].cima     = newPlayer.cima;
+                            gamePlayers[username].baixo    = newPlayer.baixo;
+                            gamePlayers[username].esquerda = newPlayer.esquerda;
+                            gamePlayers[username].direita  = newPlayer.direita;
+                            const cur = gamePlayers[username].position;
+                            const nxt = newPlayer.position;
+                            gamePlayers[username].position = {
+                                x: cur.x + (nxt.x - cur.x) * 0.05,
+                                y: cur.y + (nxt.y - cur.y) * 0.05
+                            };
+                        } else {
+                            gamePlayers[username] = newPlayer;
+                        }
+                    }
+                    hudPlayers.textContent = Object.keys(gamePlayers).length;
+                }
+            };
+
+            socket.onerror = function() {
+                statusDot.classList.add('offline');
+                statusText.textContent = 'ERRO';
+            };
+
+            socket.onclose = function() {
+                statusDot.classList.add('offline');
+                statusText.textContent = 'OFFLINE';
+                disconnectedMsg.classList.add('visible');
+            };
+        }
+
+        // Movimento
+        let movimento = { esquerda: false, direita: false, cima: false, baixo: false };
+        let movimentoInterval = null;
+
         function enviarPosicao() {
-            let playerPos = gamePlayers[nomeUsuario].position;
-            console.log(`Enviando posição: x=${playerPos.x}, y=${playerPos.y}`);
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            if (!gamePlayers[nomeUsuario] || !gamePlayers[nomeUsuario].position) return;
+            const playerPos = gamePlayers[nomeUsuario].position;
             socket.send(JSON.stringify({
                 type: "update_movement",
                 movimento: movimento,
@@ -120,29 +482,24 @@
             }));
         }
 
-        // Eventos de teclado (para PC)
         document.addEventListener("keydown", function(event) {
             let mudou = false;
             if (event.key === "a" && !movimento.esquerda) { movimento.esquerda = true; mudou = true; }
-            if (event.key === "d" && !movimento.direita) { movimento.direita = true; mudou = true; }
-            if (event.key === "w" && !movimento.cima) { movimento.cima = true; mudou = true; }
-            if (event.key === "s" && !movimento.baixo) { movimento.baixo = true; mudou = true; }
-
+            if (event.key === "d" && !movimento.direita)  { movimento.direita  = true; mudou = true; }
+            if (event.key === "w" && !movimento.cima)     { movimento.cima     = true; mudou = true; }
+            if (event.key === "s" && !movimento.baixo)    { movimento.baixo    = true; mudou = true; }
             if (mudou) {
-                if (!movimentoInterval) {
-                    movimentoInterval = setInterval(enviarPosicao, 50);
-                }
+                if (!movimentoInterval) movimentoInterval = setInterval(enviarPosicao, 50);
                 enviarPosicao();
             }
         });
 
         document.addEventListener("keyup", function(event) {
             let mudou = false;
-            if (event.key === "a" && movimento.esquerda) { movimento.esquerda = false; mudou = true; }
-            if (event.key === "d" && movimento.direita) { movimento.direita = false; mudou = true; }
-            if (event.key === "w" && movimento.cima) { movimento.cima = false; mudou = true; }
-            if (event.key === "s" && movimento.baixo) { movimento.baixo = false; mudou = true; }
-
+            if (event.key === "a") { movimento.esquerda = false; mudou = true; }
+            if (event.key === "d") { movimento.direita  = false; mudou = true; }
+            if (event.key === "w") { movimento.cima     = false; mudou = true; }
+            if (event.key === "s") { movimento.baixo    = false; mudou = true; }
             if (mudou) {
                 clearInterval(movimentoInterval);
                 movimentoInterval = null;
@@ -150,180 +507,89 @@
             }
         });
 
-        // Função para mover com os botões de direção para o celular
-        function movimentarComBotao(direcao) {
-            switch (direcao) {
-                case 'up':
-                    movimento.cima = true;
-                    break;
-                case 'down':
-                    movimento.baixo = true;
-                    break;
-                case 'left':
-                    movimento.esquerda = true;
-                    break;
-                case 'right':
-                    movimento.direita = true;
-                    break;
-            }
-
-            if (!movimentoInterval) {
-                movimentoInterval = setInterval(enviarPosicao, 50);
-            }
-            enviarPosicao();
-        }
-
-        // Função para parar com os botões de direção
-        function pararMovimento(direcao) {
-            switch (direcao) {
-                case 'up':
-                    movimento.cima = false;
-                    break;
-                case 'down':
-                    movimento.baixo = false;
-                    break;
-                case 'left':
-                    movimento.esquerda = false;
-                    break;
-                case 'right':
-                    movimento.direita = false;
-                    break;
-            }
-
-            if (movimentoInterval) {
+        // Botões mobile
+        function bindBtn(id, direcao) {
+            const btn = document.getElementById(id);
+            const press = () => {
+                movimento[direcao] = true;
+                btn.classList.add('pressed');
+                if (!movimentoInterval) movimentoInterval = setInterval(enviarPosicao, 50);
+                enviarPosicao();
+            };
+            const release = () => {
+                movimento[direcao] = false;
+                btn.classList.remove('pressed');
                 clearInterval(movimentoInterval);
                 movimentoInterval = null;
-            }
-            enviarPosicao();
+                enviarPosicao();
+            };
+            btn.addEventListener("touchstart", e => { e.preventDefault(); press(); }, { passive: false });
+            btn.addEventListener("touchend",   e => { e.preventDefault(); release(); }, { passive: false });
+            btn.addEventListener("mousedown",  press);
+            btn.addEventListener("mouseup",    release);
         }
 
-        // Eventos para os botões de controle para o celular
-        document.getElementById("upBtn").addEventListener("touchstart", function() {
-            movimentarComBotao("up");
-        });
+        bindBtn('upBtn',    'cima');
+        bindBtn('downBtn',  'baixo');
+        bindBtn('leftBtn',  'esquerda');
+        bindBtn('rightBtn', 'direita');
 
-        document.getElementById("downBtn").addEventListener("touchstart", function() {
-            movimentarComBotao("down");
-        });
+        // Render
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = false;
 
-        document.getElementById("leftBtn").addEventListener("touchstart", function() {
-            movimentarComBotao("left");
-        });
+        function desenharNome(ctx, nome, x, y) {
+            ctx.font = '6px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(x - ctx.measureText(nome).width / 2 - 3, y - 10, ctx.measureText(nome).width + 6, 12);
+            ctx.fillStyle = '#00ff80';
+            ctx.fillText(nome, x, y);
+        }
 
-        document.getElementById("rightBtn").addEventListener("touchstart", function() {
-            movimentarComBotao("right");
-        });
+        function desenharJogadores() {
+            if (!gamePlayers[nomeUsuario] || !gamePlayers[nomeUsuario].position) {
+                requestAnimationFrame(desenharJogadores);
+                return;
+            }
 
-        document.getElementById("upBtn").addEventListener("touchend", function() {
-            pararMovimento("up");
-        });
+            const playerPos = gamePlayers[nomeUsuario].position;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(-playerPos.x + canvas.width / 2, -playerPos.y + canvas.height / 2);
+            ctx.drawImage(background, 0, 0);
 
-        document.getElementById("downBtn").addEventListener("touchend", function() {
-            pararMovimento("down");
-        });
+            const jogadoresOrdenados = Object.values(gamePlayers).sort((a, b) => a.position.y - b.position.y);
 
-        document.getElementById("leftBtn").addEventListener("touchend", function() {
-            pararMovimento("left");
-        });
+            for (const player of jogadoresOrdenados) {
+                if (!player || !player.position) continue;
 
-        document.getElementById("rightBtn").addEventListener("touchend", function() {
-            pararMovimento("right");
-        });
+                if (player.esquerda) player.position.x -= 2;
+                if (player.direita)  player.position.x += 2;
+                if (player.cima)     player.position.y -= 2;
+                if (player.baixo)    player.position.y += 2;
 
-        socket.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            if (data.type === "players_list_update") {
-                const updatedPlayers = data.players;
-
-                for (const username in updatedPlayers) {
-                    const newPlayer = updatedPlayers[username];
-                    if (gamePlayers[username] && gamePlayers[username].position) {
-                        gamePlayers[username].cima = newPlayer.cima;
-                        gamePlayers[username].baixo = newPlayer.baixo;
-                        gamePlayers[username].esquerda = newPlayer.esquerda;
-                        gamePlayers[username].direita = newPlayer.direita;
-
-                        const currentPos = gamePlayers[username].position;
-                        const newPos = newPlayer.position;
-
-                        gamePlayers[username].position = {
-                            x: currentPos.x + (newPos.x - currentPos.x) * 0.05,
-                            y: currentPos.y + (newPos.y - currentPos.y) * 0.05
-                        };
-                    } else {
-                        gamePlayers[username] = newPlayer;
-                    }
+                let imagemAtual;
+                if (!player.esquerda && !player.direita && !player.cima && !player.baixo) {
+                    imagemAtual = idleImages[Math.floor(Date.now() / 400) % idleImages.length];
+                } else {
+                    imagemAtual = runningImages[Math.floor(Date.now() / 100) % runningImages.length];
                 }
+
+                const largura = imagemAtual.width * 2;
+                const altura  = imagemAtual.height * 2;
+                const px = Math.round(player.position.x);
+                const py = Math.round(player.position.y);
+
+                ctx.drawImage(imagemAtual, px, py, largura, altura);
+                desenharNome(ctx, player.id, px + largura / 2, py - 4);
             }
-        };
 
-        socket.onerror = function(error) {
-            console.log("Erro no WebSocket: ", error);
-        };
-
-        socket.onclose = function() {
-            console.log("Conexão fechada.");
-        };
-
-		function desenharJogadores() {
-			if (!gamePlayers[nomeUsuario] || !gamePlayers[nomeUsuario].position) {
-				requestAnimationFrame(desenharJogadores);
-				return;
-			}
-
-			const playerPos = gamePlayers[nomeUsuario].position;
-
-			// Limpa a tela antes de desenhar
-			ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-			// Salva o estado do canvas antes de mexer nele
-			ctx.save();
-
-			// Move o "mundo" para simular a câmera seguindo o jogador
-			ctx.translate(-playerPos.x + canvas.width / 2, -playerPos.y + canvas.height / 2);
-
-			// Desenha o background fixo na posição 0,0 (ele nunca se move)
-			ctx.drawImage(background, 0, 0);
-
-			// Ordena jogadores pela posição Y para efeito de profundidade
-			const jogadoresOrdenados = Object.values(gamePlayers).sort((a, b) => a.position.y - b.position.y);
-
-for (const player of jogadoresOrdenados) {
-    if (player && player.position) {
-        // Atualiza posição do jogador
-        if (player.esquerda) { player.position.x -= 2; }
-        if (player.direita) { player.position.x += 2; }
-        if (player.cima) { player.position.y -= 2; }
-        if (player.baixo) { player.position.y += 2; }
-
-        // Escolhe a imagem correta
-        let imagemAtual;
-        if (!player.esquerda && !player.direita && !player.cima && !player.baixo) {
-            const frameIndex = Math.floor(Date.now() / 400) % idleImages.length;
-            imagemAtual = idleImages[frameIndex];
-        } else {
-            const frameIndex = Math.floor(Date.now() / 100) % runningImages.length;
-            imagemAtual = runningImages[frameIndex];
+            ctx.restore();
+            requestAnimationFrame(desenharJogadores);
         }
 
-            // Desenha a imagem com o dobro do tamanho (2x)
-            const largura = imagemAtual.width * 2;  // Dobra a largura da imagem
-            const altura = imagemAtual.height * 2;  // Dobra a altura da imagem
-            ctx.drawImage(imagemAtual, Math.round(player.position.x), Math.round(player.position.y), largura, altura);
-    }
-}
-
-
-			// Restaura o estado original do canvas
-			ctx.restore();
-
-			requestAnimationFrame(desenharJogadores);
-		}
-
-
-
-
-        // Inicia o loop de desenho após a imagem idle estar carregada
         idleImages[0].onload = function() {
             desenharJogadores();
         };
