@@ -1,0 +1,332 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo Básico</title>
+    <style>
+        /* Adicionando um estilo simples para os botões de controle */
+        .control-buttons {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .control-buttons button {
+            padding: 10px;
+            background-color: #ccc;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .control-buttons button:active {
+            background-color: #888;
+        }
+    </style>
+</head>
+<body>
+    <h1>Jogo Básico</h1>
+    <canvas id="gameCanvas" width="500" height="300" style="border: 2px solid black;"></canvas>
+    
+    <div class="control-buttons">
+        <button id="upBtn">↑</button>
+        <button id="leftBtn">←</button>
+        <button id="rightBtn">→</button>
+        <button id="downBtn">↓</button>
+    </div>
+
+    <script>
+        let nomeUsuario = prompt("Digite seu nome de usuário:");
+		
+		const background = new Image();
+		background.src = "{% static 'img/background.png' %}";
+
+        // Animação de parado (idle)
+        const idleImages = [];
+        idleImages.push(new Image());
+        idleImages[0].src = "{% static 'img/James-Lateral-8.png' %}";
+        idleImages.push(new Image());
+        idleImages[1].src = "{% static 'img/James-Lateral-9.png' %}";
+
+        // Animação de corrida (imagens de 1 a 7)
+        const runningImages = [];
+        runningImages.push(new Image());
+        runningImages[0].src = "{% static 'img/James-Lateral-1.png' %}";
+        runningImages.push(new Image());
+        runningImages[1].src = "{% static 'img/James-Lateral-2.png' %}";
+        runningImages.push(new Image());
+        runningImages[2].src = "{% static 'img/James-Lateral-3.png' %}";
+        runningImages.push(new Image());
+        runningImages[3].src = "{% static 'img/James-Lateral-4.png' %}";
+        runningImages.push(new Image());
+        runningImages[4].src = "{% static 'img/James-Lateral-5.png' %}";
+        runningImages.push(new Image());
+        runningImages[5].src = "{% static 'img/James-Lateral-6.png' %}";
+        runningImages.push(new Image());
+        runningImages[6].src = "{% static 'img/James-Lateral-7.png' %}";
+
+        const socket = new WebSocket("ws://" + window.location.host + "/ws/game/");
+        let gamePlayers = {}; // Armazena os jogadores
+
+        // Configuração do Canvas
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+		ctx.imageSmoothingEnabled = false;  // Desabilita a suavização da imagem
+
+        socket.onopen = function() {
+            if (nomeUsuario) {
+                console.log("Nome de usuário: " + nomeUsuario);
+                socket.send(JSON.stringify({
+                    type: "set_username",
+                    username: nomeUsuario
+                }));
+            }
+        };
+
+        let movimento = {
+            esquerda: false,
+            direita: false,
+            cima: false,
+            baixo: false
+        };
+
+        let movimentoAnterior = { ...movimento };
+        let movimentoInterval = null;  // Armazena o intervalo de envio de movimento
+
+        function enviarMovimento() {
+            if (JSON.stringify(movimento) !== JSON.stringify(movimentoAnterior)) {
+                socket.send(JSON.stringify({
+                    type: "update_movement",
+                    movimento: movimento
+                }));
+                movimentoAnterior = { ...movimento };
+            }
+        }
+
+        function enviarPosicao() {
+            let playerPos = gamePlayers[nomeUsuario].position;
+            console.log(`Enviando posição: x=${playerPos.x}, y=${playerPos.y}`);
+            socket.send(JSON.stringify({
+                type: "update_movement",
+                movimento: movimento,
+                position: { x: playerPos.x, y: playerPos.y }
+            }));
+        }
+
+        // Eventos de teclado (para PC)
+        document.addEventListener("keydown", function(event) {
+            let mudou = false;
+            if (event.key === "a" && !movimento.esquerda) { movimento.esquerda = true; mudou = true; }
+            if (event.key === "d" && !movimento.direita) { movimento.direita = true; mudou = true; }
+            if (event.key === "w" && !movimento.cima) { movimento.cima = true; mudou = true; }
+            if (event.key === "s" && !movimento.baixo) { movimento.baixo = true; mudou = true; }
+
+            if (mudou) {
+                if (!movimentoInterval) {
+                    movimentoInterval = setInterval(enviarPosicao, 50);
+                }
+                enviarPosicao();
+            }
+        });
+
+        document.addEventListener("keyup", function(event) {
+            let mudou = false;
+            if (event.key === "a" && movimento.esquerda) { movimento.esquerda = false; mudou = true; }
+            if (event.key === "d" && movimento.direita) { movimento.direita = false; mudou = true; }
+            if (event.key === "w" && movimento.cima) { movimento.cima = false; mudou = true; }
+            if (event.key === "s" && movimento.baixo) { movimento.baixo = false; mudou = true; }
+
+            if (mudou) {
+                clearInterval(movimentoInterval);
+                movimentoInterval = null;
+                enviarPosicao();
+            }
+        });
+
+        // Função para mover com os botões de direção para o celular
+        function movimentarComBotao(direcao) {
+            switch (direcao) {
+                case 'up':
+                    movimento.cima = true;
+                    break;
+                case 'down':
+                    movimento.baixo = true;
+                    break;
+                case 'left':
+                    movimento.esquerda = true;
+                    break;
+                case 'right':
+                    movimento.direita = true;
+                    break;
+            }
+
+            if (!movimentoInterval) {
+                movimentoInterval = setInterval(enviarPosicao, 50);
+            }
+            enviarPosicao();
+        }
+
+        // Função para parar com os botões de direção
+        function pararMovimento(direcao) {
+            switch (direcao) {
+                case 'up':
+                    movimento.cima = false;
+                    break;
+                case 'down':
+                    movimento.baixo = false;
+                    break;
+                case 'left':
+                    movimento.esquerda = false;
+                    break;
+                case 'right':
+                    movimento.direita = false;
+                    break;
+            }
+
+            if (movimentoInterval) {
+                clearInterval(movimentoInterval);
+                movimentoInterval = null;
+            }
+            enviarPosicao();
+        }
+
+        // Eventos para os botões de controle para o celular
+        document.getElementById("upBtn").addEventListener("touchstart", function() {
+            movimentarComBotao("up");
+        });
+
+        document.getElementById("downBtn").addEventListener("touchstart", function() {
+            movimentarComBotao("down");
+        });
+
+        document.getElementById("leftBtn").addEventListener("touchstart", function() {
+            movimentarComBotao("left");
+        });
+
+        document.getElementById("rightBtn").addEventListener("touchstart", function() {
+            movimentarComBotao("right");
+        });
+
+        document.getElementById("upBtn").addEventListener("touchend", function() {
+            pararMovimento("up");
+        });
+
+        document.getElementById("downBtn").addEventListener("touchend", function() {
+            pararMovimento("down");
+        });
+
+        document.getElementById("leftBtn").addEventListener("touchend", function() {
+            pararMovimento("left");
+        });
+
+        document.getElementById("rightBtn").addEventListener("touchend", function() {
+            pararMovimento("right");
+        });
+
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === "players_list_update") {
+                const updatedPlayers = data.players;
+
+                for (const username in updatedPlayers) {
+                    const newPlayer = updatedPlayers[username];
+                    if (gamePlayers[username] && gamePlayers[username].position) {
+                        gamePlayers[username].cima = newPlayer.cima;
+                        gamePlayers[username].baixo = newPlayer.baixo;
+                        gamePlayers[username].esquerda = newPlayer.esquerda;
+                        gamePlayers[username].direita = newPlayer.direita;
+
+                        const currentPos = gamePlayers[username].position;
+                        const newPos = newPlayer.position;
+
+                        gamePlayers[username].position = {
+                            x: currentPos.x + (newPos.x - currentPos.x) * 0.05,
+                            y: currentPos.y + (newPos.y - currentPos.y) * 0.05
+                        };
+                    } else {
+                        gamePlayers[username] = newPlayer;
+                    }
+                }
+            }
+        };
+
+        socket.onerror = function(error) {
+            console.log("Erro no WebSocket: ", error);
+        };
+
+        socket.onclose = function() {
+            console.log("Conexão fechada.");
+        };
+
+		function desenharJogadores() {
+			if (!gamePlayers[nomeUsuario] || !gamePlayers[nomeUsuario].position) {
+				requestAnimationFrame(desenharJogadores);
+				return;
+			}
+
+			const playerPos = gamePlayers[nomeUsuario].position;
+
+			// Limpa a tela antes de desenhar
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			// Salva o estado do canvas antes de mexer nele
+			ctx.save();
+
+			// Move o "mundo" para simular a câmera seguindo o jogador
+			ctx.translate(-playerPos.x + canvas.width / 2, -playerPos.y + canvas.height / 2);
+
+			// Desenha o background fixo na posição 0,0 (ele nunca se move)
+			ctx.drawImage(background, 0, 0);
+
+			// Ordena jogadores pela posição Y para efeito de profundidade
+			const jogadoresOrdenados = Object.values(gamePlayers).sort((a, b) => a.position.y - b.position.y);
+
+for (const player of jogadoresOrdenados) {
+    if (player && player.position) {
+        // Atualiza posição do jogador
+        if (player.esquerda) { player.position.x -= 2; }
+        if (player.direita) { player.position.x += 2; }
+        if (player.cima) { player.position.y -= 2; }
+        if (player.baixo) { player.position.y += 2; }
+
+        // Escolhe a imagem correta
+        let imagemAtual;
+        if (!player.esquerda && !player.direita && !player.cima && !player.baixo) {
+            const frameIndex = Math.floor(Date.now() / 400) % idleImages.length;
+            imagemAtual = idleImages[frameIndex];
+        } else {
+            const frameIndex = Math.floor(Date.now() / 100) % runningImages.length;
+            imagemAtual = runningImages[frameIndex];
+        }
+
+            // Desenha a imagem com o dobro do tamanho (2x)
+            const largura = imagemAtual.width * 2;  // Dobra a largura da imagem
+            const altura = imagemAtual.height * 2;  // Dobra a altura da imagem
+            ctx.drawImage(imagemAtual, Math.round(player.position.x), Math.round(player.position.y), largura, altura);
+    }
+}
+
+
+			// Restaura o estado original do canvas
+			ctx.restore();
+
+			requestAnimationFrame(desenharJogadores);
+		}
+
+
+
+
+        // Inicia o loop de desenho após a imagem idle estar carregada
+        idleImages[0].onload = function() {
+            desenharJogadores();
+        };
+    </script>
+</body>
+</html>
